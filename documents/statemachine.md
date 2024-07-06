@@ -4,21 +4,26 @@ The main loop of the system is the state machine.
 
 ```mermaid
 graph TD
-INIT--[wifi creds in memory]-->WAITING_FOR_WIFI
-INIT --[no creds]-->SETUP
-SETUP --> REBOOT
 WAITING_FOR_WIFI[WAIT FOR WIFI]
-WAITING_FOR_WIFI --[timeout]-->REBOOT
-WAITING_FOR_WIFI --> CHECK
+INIT--[wifi creds in memory]-->WAITING_FOR_WIFI
+INIT --[no creds]-->WIFI_SETUP
+WIFI_SETUP --> REBOOT
+WAITING_FOR_WIFI --[timeout] --> WIFI_SETUP
+WAITING_FOR_WIFI --> CHECK_OTA
 WAITING_FOR_QUEUE[WAIT FOR QUEUE]
-CHECK --[if OTA is available]-->OTA
+CHECK_OTA --[if OTA is available]-->OTA
+CHECK_OTA --[no OTA] --> CHECK_POWERSWITCH
+CHECK_POWERSWITCH --[power on]-->CHECK_OWNTONE
+CHECK_POWERSWITCH --[power off]-->OFF
+OFF --[power on]-->CHECK_OWNTONE
 OTA --[error]-->OTA_ERROR
 OTA_ERROR --> ERROR
+CHECK_OWNTONE --[owntone isn't available]--> WIFI_SETUP
 OTA --[success]-->REBOOT
 ERROR --[button press]-->REBOOT
-CHECK --[if music is already playing on owntone]-->WAITING_FOR_QUEUE
+CHECK_OWNTONE --[if music is already playing on owntone]-->WAITING_FOR_QUEUE
 WAITING_FOR_QUEUE --[check at internal]-->SPINNING
-CHECK --[queue is empty]-->SPINNING
+CHECK_OWNTONE --[queue is empty]-->SPINNING
 SPINNING --[once tag is read]-->QUEUING
 SPINNING --[timeout]--> TAG_ERROR
 TAG_ERROR --> ERROR
@@ -26,8 +31,11 @@ QUEUING --[200 server success]--> QUEUED
 QUEUING --[server error]--> QUEUE_ERROR
 QUEUE_ERROR --> ERROR
 QUEUED --[needle turned on]--> PLAYING
+QUEUED --[power off]-->DRAINING
+DRAINING --[queue empty or timeout] --> OFF
 PLAYING --[needle is off]--> PAUSED
 PAUSED --[needled is turned on]--> PLAYING
+PAUSED --[power switch off] --> DRAINING
 PAUSED --[queue is cleared]--> FINISHED
 PLAYING --[queue is cleared]--> FINISHED
 FINISHED --[needle is off]--> DONE
