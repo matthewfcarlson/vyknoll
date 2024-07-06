@@ -5,6 +5,7 @@
 #include <esp_wifi.h>
 #include <cstring>
 #include <list>
+#include <vyknoll.h>
 
 void setup() {
     // TODO: setup
