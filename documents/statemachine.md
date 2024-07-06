@@ -4,11 +4,21 @@ The main loop of the system is the state machine.
 
 ```mermaid
 graph TD
-INIT
+INIT--[wifi creds in memory]-->WAITING_FOR_WIFI
+INIT --[no creds]-->SETUP
+SETUP --> REBOOT
+WAITING_FOR_WIFI[WAIT FOR WIFI]
+WAITING_FOR_WIFI --[timeout]-->REBOOT
+WAITING_FOR_WIFI --> CHECK
 WAITING_FOR_QUEUE[WAIT FOR QUEUE]
-INIT --[if music is already playing on owntone]-->WAITING_FOR_QUEUE
+CHECK --[if OTA is available]-->OTA
+OTA --[error]-->OTA_ERROR
+OTA_ERROR --> ERROR
+OTA --[success]-->REBOOT
+ERROR --[button press]-->REBOOT
+CHECK --[if music is already playing on owntone]-->WAITING_FOR_QUEUE
 WAITING_FOR_QUEUE --[check at internal]-->SPINNING
-INIT --[queue is empty]-->SPINNING
+CHECK --[queue is empty]-->SPINNING
 SPINNING --[once tag is read]-->QUEUING
 SPINNING --[timeout]--> TAG_ERROR
 TAG_ERROR --> ERROR
