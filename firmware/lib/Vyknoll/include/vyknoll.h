@@ -31,10 +31,13 @@ typedef enum {
   TAG_ERROR,
   QUEUE_ERROR,
   OTA_ERROR,
+  HAL_ERROR,
 } vyknoll_states_t;
 
+#define CONFIG_MAGIC 0x56594B4E4F4C4C21
+
 typedef struct {
-  char magic[8]; // "Vyknoll"
+  uint64_t magic; // "Vyknoll!"
   uint8_t version; // 0 
   char ssid[64]; // WiFi SSID
   char password[64]; // WiFi password

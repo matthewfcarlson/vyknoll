@@ -1,26 +1,56 @@
 #include <vyknoll.h>
 #include <vyknoll_hal.h>
+#include <periodic_task.hpp>
+#include <synced_property.hpp>
+#include <timeout.hpp>
 #include <string.h>
+#include <stdint.h>
+#include <stdbool.h>
+
+#define MAX_OUTPUTS 4
 
 vyknoll_states_t currentState = INIT;
 vyknoll_persisted_config_t config = {0};
 
-// Tick functions
+// Internal state
+char tagData[64] = {0};
+SyncedProperty<uint32_t> ownToneVolume = SyncedProperty<uint32_t>(0);
+SyncedProperty<uint32_t> ownToneQueueLength = SyncedProperty<uint32_t>(0);
+PeriodicTask* checkOwnToneQueueLength;
+PeriodicTask* checkOwnToneVolume;
+TimeOut WifiTimeout = TimeOut(30000);
+char* outputNames[MAX_OUTPUTS] = {0};
+bool outputsEnabled[MAX_OUTPUTS] = {0};
 
+
+void InternalReset() {
+    bzero(tagData, sizeof(tagData));
+    bzero(outputsEnabled, sizeof(outputsEnabled));
+    for (int i = 0; i < MAX_OUTPUTS; i++) {
+        if (outputNames[i] == nullptr) continue;
+        free(outputNames[i]);
+        outputNames[i] = nullptr;
+    }
+}
+
+// Tick functions
 vyknoll_states_t StateTickInit() {
     if (!PersistedStateGet(&config)){
         return WIFI_SETUP;
     }
-    if (config.magic == 0 || strnlen(config.ssid, 64) == 0 || strnlen(config.password, 64) == 0 || strnlen(config.server, 16) == 0 || config.port == 0) {
+    if (config.magic != CONFIG_MAGIC || strnlen(config.ssid, 64) == 0 || strnlen(config.password, 64) == 0 || strnlen(config.server, 16) == 0 || config.port == 0) {
         return WIFI_SETUP;
     }
     return WAITING_FOR_WIFI;
 }
 
 vyknoll_states_t StateTickWaitingForWifi() {
-    // if (WiFi.status() == WL_CONNECTED) {
-    //     return CHECK_OTA;
-    // }
+    if (WiFiIsConnected()) {
+        return CHECK_OTA;
+    }
+    if (WifiTimeout.Check()) {
+        return WIFI_SETUP;
+    }
     return WAITING_FOR_WIFI;
 }
 
@@ -50,6 +80,7 @@ vyknoll_states_t StateTickWifiSetup() {
 vyknoll_states_t StateTickWaitingForQueue() {
     // Wait for the queue to be empty
     // TODO
+    // TODO: periodic task that gets run and queries the queue count?
     return WAITING_FOR_QUEUE;
     // If the queue is empty
     // return SPINNING;
@@ -57,7 +88,12 @@ vyknoll_states_t StateTickWaitingForQueue() {
 
 vyknoll_states_t StateTickSpinning() {
     // Wait for a tag to be read
-    // TODO
+    if (NFCReadTag(tagData, sizeof(tagData))) {
+        // We got a tag, move on
+        // TODO: do we need to issue a lookup first?
+        // How are NFC tags encoded?
+        return QUEUING;
+    }
     return SPINNING;
 }
 
@@ -167,7 +203,9 @@ void StateStartInit() {
 }
 void StateStartWaitingForWifi() {
     // Connect to wifi with the creds we have stored
-    // WiFi.begin(config.ssid, config.password);
+    WiFiConnect(config.ssid, config.password);
+    // Start the timeout timer
+    WifiTimeout.Start();
     return;
 }
 void StateStartCheckOTA() {
@@ -232,6 +270,21 @@ void StateStartTagError() {
     // TODO
     return;
 }
+void StateStartOTAError() {
+    // Display the ota error screen
+    // TODO
+    return;
+}
+void StateStartHalError() {
+    // Display the hal error screen
+    // TODO
+    return;
+}
+void StateStartQueueError() {
+    // Display the queue error screen
+    // TODO
+    return;
+}
 
 
 void StateMachineTick(void) {
@@ -258,8 +311,18 @@ void StateMachineTick(void) {
         case TAG_ERROR: nextState = StateTickError(); break;
         case QUEUE_ERROR: nextState = StateTickError(); break;
         case OTA_ERROR: nextState = StateTickError(); break;
+        case HAL_ERROR: nextState = StateTickError(); break;
         case OFF: nextState = StateTickOff(); break;
   }
+  // Check for a HAL error and aren't already in an error state
+  if (HALErrorTriggered() && currentState < ERROR) {
+    nextState = HAL_ERROR;
+  }
+  
+  // If we aren't transitioning to a new state, abort here
+  if (nextState == currentState) return;
+
+  // Handle the transition to a new state
   switch (nextState) {
       case INIT: break;
       case WAITING_FOR_WIFI: StateStartWaitingForWifi(); break;
@@ -279,8 +342,9 @@ void StateMachineTick(void) {
       case OFF: StateStartOff(); break;
       case REBOOT: break;
       case TAG_ERROR: StateStartTagError(); break;
-      case QUEUE_ERROR: StateStartTagError(); break;
-      case OTA_ERROR: StateStartTagError(); break;
+      case QUEUE_ERROR: StateStartQueueError(); break;
+      case OTA_ERROR: StateStartOTAError(); break;
+      case HAL_ERROR: StateStartHalError(); break;
       case ERROR: break;
       case WIFI_SETUP: break;
   }
