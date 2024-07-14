@@ -1,4 +1,6 @@
 // Vyknoll expects these functions to be implemented in the firmware
+#pragma once
+
 #include <vyknoll.h>
 #include <stdbool.h>
 
@@ -15,6 +17,9 @@ bool PersistedStateSave(vyknoll_persisted_config_t* config);
 bool LcdTurnOff(void);
 bool LcdTurnOn(void);
 bool LcdClearDisplay(void);
+bool LcdDrawText(const char* text);
+bool LcdDrawText(const char* text, uint16_t y);
+bool LcdDrawText(const char* text, uint16_t x, uint16_t y);
 
 // Power Switch
 bool PowerSwitchReadIfOn(void);

@@ -11,7 +11,6 @@
 
 
 bool spiffsStarted = false;
-bool halErrorTriggered = false;
 const char configFilePath[] = "/config.bin";
 
 void HALSetup() {
@@ -23,12 +22,6 @@ void HALSetup() {
     } else {
         spiffsStarted = true;
     }
-}
-void HALTriggerError() {
-    halErrorTriggered = true;
-}
-bool HALErrorTriggered() {
-    return halErrorTriggered;
 }
 
 // Read the config from a file

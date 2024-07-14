@@ -1,0 +1,4 @@
+/toolchain-xtensa-*
+/toolchain-riscv32-*
+/framework-arduino*
+/tool-*

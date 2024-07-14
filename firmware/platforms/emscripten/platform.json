@@ -1,0 +1,21 @@
+{
+  "name": "emscripten",
+  "title": "Emscripten",
+  "description": "Emscripten development platform meant to compile code to JS",
+  "homepage": "https://registry.platformio.org/platforms/platformio/emscripten",
+  "license": "Apache-2.0",
+  "keywords": [
+      "dev-platform",
+      "emscripten",
+      "javascript",
+      "desktop"
+  ],
+  "engines": {
+    "platformio": "^6"
+  },
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/platformio/platform-emscripten.git"
+  },
+  "version": "1.0.0"
+}

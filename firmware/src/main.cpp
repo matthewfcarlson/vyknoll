@@ -1,4 +1,6 @@
+#ifndef EMSCRIPTEN
 #include <Arduino.h>
+#endif
 #include <vyknoll.h>
 #include <vyknoll_hal.h>
 

@@ -4,8 +4,10 @@
 #include <synced_property.hpp>
 #include <timeout.hpp>
 #include <string.h>
+#include <iostream>
 #include <stdint.h>
 #include <stdbool.h>
+#include <magic_enum.hpp>
 
 #define MAX_OUTPUTS 4
 
@@ -15,12 +17,14 @@ vyknoll_persisted_config_t config = {0};
 // Internal state
 char tagData[64] = {0};
 SyncedProperty<uint32_t> ownToneVolume = SyncedProperty<uint32_t>(0);
-SyncedProperty<uint32_t> ownToneQueueLength = SyncedProperty<uint32_t>(0);
+SyncedProperty<uint32_t> ownToneQueueLength = SyncedProperty<uint32_t>(100); // start with a queue size of 100 just because
 PeriodicTask* checkOwnToneQueueLength;
 PeriodicTask* checkOwnToneVolume;
 TimeOut WifiTimeout = TimeOut(30000);
+TimeOut QueueTimeout = TimeOut(30000);
 char* outputNames[MAX_OUTPUTS] = {0};
 bool outputsEnabled[MAX_OUTPUTS] = {0};
+static bool _halErrorTriggered = false;
 
 
 void InternalReset() {
@@ -31,6 +35,14 @@ void InternalReset() {
         free(outputNames[i]);
         outputNames[i] = nullptr;
     }
+}
+
+// Hal function
+void HALTriggerError(void) {
+    _halErrorTriggered = true;
+}
+bool HALErrorTriggered(void) {
+    return _halErrorTriggered;
 }
 
 // Tick functions
@@ -55,16 +67,21 @@ vyknoll_states_t StateTickWaitingForWifi() {
 }
 
 vyknoll_states_t StateTickCheckOTA() {
-    return CHECK_OWNTONE;
+    // TODO
+    return CHECK_POWERSWITCH;
+    // return OTA;
 }
 
 vyknoll_states_t StateTickCheckOwntone() {
     // Wait for Owntone to reply with its queue information
-    // TODO
+    if (checkOwnToneQueueLength != nullptr) checkOwnToneQueueLength->Check();
+    if (ownToneQueueLength.GetValue().value == 0) {
+        return SPINNING;
+    }
     return WAITING_FOR_QUEUE;
 }
 
-vyknoll_states_t StateTickCheckPowerswitch() {
+vyknoll_states_t StateTickCheckPowerSwitch() {
     if (PowerSwitchReadIfOn()) {
         return CHECK_OWNTONE;
     }
@@ -79,11 +96,14 @@ vyknoll_states_t StateTickWifiSetup() {
 
 vyknoll_states_t StateTickWaitingForQueue() {
     // Wait for the queue to be empty
-    // TODO
-    // TODO: periodic task that gets run and queries the queue count?
+    if (checkOwnToneQueueLength != nullptr) checkOwnToneQueueLength->Check();
+    if (ownToneQueueLength.GetValue().value == 0) {
+        return SPINNING;
+    }
+    if (QueueTimeout.Check()) {
+        return QUEUE_ERROR;
+    }
     return WAITING_FOR_QUEUE;
-    // If the queue is empty
-    // return SPINNING;
 }
 
 vyknoll_states_t StateTickSpinning() {
@@ -194,11 +214,13 @@ vyknoll_states_t StateTickOTA() {
 vyknoll_states_t StateTickOff() {
     // Check if the power switch is on
     // Go into a low power mode for a second
-    return CHECK_POWERSWITCH;
+    if (PowerSwitchReadIfOn()) return CHECK_POWERSWITCH;
+    return OFF;
 }
 
 // Transition functions
 void StateStartInit() {
+    LcdTurnOff();
     return;
 }
 void StateStartWaitingForWifi() {
@@ -218,7 +240,10 @@ void StateStartCheckOwnTone() {
 }
 void StateStartWaitingForQueue() {
     // Display the waiting for queue screen
-    // TODO
+    QueueTimeout.Start();
+    LcdTurnOn();
+    LcdClearDisplay();
+    LcdDrawText("Waiting for Empty Queue");
     return;
 }
 void StateStartSpinning() {
@@ -262,7 +287,7 @@ void StateStartDraining() {
 }
 void StateStartOff() {
     // Display the off screen
-    // TODO
+    LcdTurnOff();
     return;
 }
 void StateStartTagError() {
@@ -294,7 +319,7 @@ void StateMachineTick(void) {
         case WAITING_FOR_WIFI: nextState = StateTickWaitingForWifi(); break;
         case CHECK_OTA: nextState = StateTickCheckOTA(); break;
         case OTA: nextState = StateTickOTA(); break;
-        case CHECK_POWERSWITCH: nextState = StateTickCheckPowerswitch(); break;
+        case CHECK_POWERSWITCH: nextState = StateTickCheckPowerSwitch(); break;
         case WIFI_SETUP: nextState = StateTickWifiSetup(); break;
         case CHECK_OWNTONE: nextState = StateTickCheckOwntone(); break;
         case QUEUING: nextState = StateTickQueueing(); break;
@@ -321,7 +346,7 @@ void StateMachineTick(void) {
   
   // If we aren't transitioning to a new state, abort here
   if (nextState == currentState) return;
-
+  std::cout << "[state] " << magic_enum::enum_name(currentState) << " -> " << magic_enum::enum_name(nextState) << std::endl;
   // Handle the transition to a new state
   switch (nextState) {
       case INIT: break;

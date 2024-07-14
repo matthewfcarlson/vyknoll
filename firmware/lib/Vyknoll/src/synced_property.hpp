@@ -7,18 +7,18 @@ class SyncedProperty {
 protected:
     T serverLastUpdatedValue;
     T serverCurrentValue;
-    uint32_t serverMillsAtLastChange;
+    uint64_t serverMillsAtLastChange;
     T localLastUpdatedValue;
     T localCurrentValue;
     T localDebouncingValue;
-    uint32_t localMillsAtLastChange;
-    uint32_t localDebounceMills;
+    uint64_t localMillsAtLastChange;
+    uint64_t localDebounceMills;
 public:
     typedef struct {
         T value;
-        uint32_t millsSinceUpdate;
+        uint64_t millsSinceUpdate;
     } value_t;
-    SyncedProperty(T defaultValue, uint32_t localDebounceMills = 0): localDebounceMills(localDebounceMills) {
+    SyncedProperty(T defaultValue, uint64_t localDebounceMills = 0): localDebounceMills(localDebounceMills) {
         serverLastUpdatedValue = defaultValue;
         serverCurrentValue = defaultValue;
         serverMillsAtLastChange = PeriodicTask::getCurrentTimeInMilliseconds();
