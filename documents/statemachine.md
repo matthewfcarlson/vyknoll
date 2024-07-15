@@ -32,6 +32,7 @@ QUEUING --[server error]--> QUEUE_ERROR
 QUEUE_ERROR --> ERROR
 QUEUED --[needle turned on]--> PLAYING
 QUEUED --[power off]-->DRAINING
+QUEUED --[queue is emptied]-->QUEUE_ERROR
 DRAINING --[queue empty or timeout] --> OFF
 PLAYING --[needle is off]--> PAUSED
 PAUSED --[needled is turned on]--> PLAYING

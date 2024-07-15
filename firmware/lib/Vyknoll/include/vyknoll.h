@@ -12,10 +12,15 @@ typedef enum {
   WAITING_FOR_QUEUE,
   SPINNING,
   OTA,
+  QUERYING,
   QUEUING,
   WIFI_SETUP,
   QUEUED,
+  PLAY,
+  PLAY_EXTERN,
   PLAYING,
+  PAUSE,
+  PAUSE_EXTERN,
   PAUSED,
   FINISHED,
   DONE,
@@ -47,3 +52,4 @@ typedef struct {
 
 void StateMachineTick(void);
 vyknoll_states_t GetState();
+void StateMachineSetup(void);

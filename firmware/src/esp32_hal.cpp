@@ -5,6 +5,9 @@
 #include <esp_system.h>
 #include <esp_now.h>
 #include <WiFi.h>
+#include <fetch.h>
+#include <ArduinoJson.h>
+#include <WiFiClientSecure.h>
 #include <esp_wifi.h>
 #include <cstring>
 #include <list>

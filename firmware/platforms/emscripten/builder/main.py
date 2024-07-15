@@ -39,7 +39,7 @@ env.Replace(
 
 
 # Preserve C and C++ build flags
-env.Append(LINKFLAGS=["-s", "--js-library","firmware/src/library.js",])
+env.Append(LINKFLAGS=["-s", "--js-library","firmware/src/library.js", "-sFETCH=1"])
 
 # Scan for GCC compiler
 # env.Tool("emcc")

@@ -6,6 +6,7 @@
 
 void setup() {
     HALSetup();
+    StateMachineSetup();
 }
 
 void loop() {
