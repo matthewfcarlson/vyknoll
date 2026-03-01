@@ -4,9 +4,9 @@
 
 ## 1. Vision
 
-Vyknoll is a **physical music player** that brings back the tactile joy of picking a record. Small 7" vinyl-shaped discs with NFC stickers act as the "records." Place one on the device, and it triggers music playback on your HomePods through **Home Assistant** and its **Music Assistant** integration.
+Vyknoll is a **physical music player** that brings back the tactile joy of picking a record. Small 7" vinyl-shaped discs — each printed with album art and fitted with an NFC sticker — act as the "records." Place one on the device, and it triggers music playback on your HomePods through **Home Assistant** and its **Music Assistant** add-on.
 
-The 4" touchscreen ESP32 display serves as the control surface — pick which room to play in, adjust volume, and manage the device's setup. No apps, no phone, no scrolling. **One touch, music plays.**
+The 4" touchscreen ESP32 display serves as the control surface — pick which room to play in, see the current track title, adjust volume, and manage the device's setup. The album art lives on the physical disc, not the screen. No apps, no phone, no scrolling. **One touch, music plays.**
 
 ### Core Experience
 
@@ -56,17 +56,19 @@ Later, upgrade to the [WebSocket API](https://developers.home-assistant.io/docs/
 
 *Why not ESPHome native API?* See the framework recommendation in Section 4.
 
-**NFC Tag Strategy: UID → Lookup in Home Assistant**
+**NFC Tag Strategy: HA's Built-in Tag Integration**
 
-Each NFC tag only needs its unique ID (UID) — no special data written to the tag. The ESP32 reads the UID and sends it to Home Assistant, which maps it to an album, playlist, or action.
+Each NFC tag only needs its unique ID (UID) — no special data written to the tag. The ESP32 reads the UID and sends it to Home Assistant via the native **Tag Scanned API** (`POST /api/tag/scanned`). HA registers tags automatically and provides a UI for managing them and creating automations.
 
 Benefits:
 - Tags are dirt cheap and require no programming
-- Mappings live in HA (editable via the HA UI, no firmware changes needed)
+- HA auto-discovers new tags — scan an unknown tag and HA prompts you to name it and set up an automation
+- Mappings are managed entirely in HA's UI (no firmware changes needed)
 - Changing what a tag plays doesn't require touching the tag
 - The same tag could trigger different behavior based on context (time of day, room, etc.)
+- Leverages HA's mature, well-tested tag infrastructure — no custom event system needed
 
-Implementation: HA automations triggered by a `tag_scanned` event, or a lookup in a HA helper/input_select entity.
+Implementation: ESP32 calls `POST /api/tag/scanned` with the tag ID. HA's Tag integration handles registration, and HA automations trigger Music Assistant playback via `tag_scanned` event triggers.
 
 **Speaker/Room Selection: Room-Based**
 
@@ -151,8 +153,9 @@ The MVP proves the end-to-end flow: **scan tag → music plays on HomePod, contr
 
 2. **NFC Tag Scanning**
    - Read NFC tag UID when presented
-   - Send tag UID to Home Assistant (fire event or call service)
-   - Visual/audio feedback on successful scan
+   - Send tag UID to Home Assistant via `POST /api/tag/scanned`
+   - HA auto-registers unknown tags for easy setup
+   - Visual feedback on successful scan
 
 3. **Speaker/Room Selection**
    - Fetch list of available media players from HA
@@ -162,7 +165,7 @@ The MVP proves the end-to-end flow: **scan tag → music plays on HomePod, contr
 4. **Basic Playback Controls** *(stretch goal for MVP)*
    - Play/pause button on screen
    - Volume slider
-   - Current track name (polled from HA)
+   - Current track title (polled from HA)
 
 ### MVP Architecture
 
@@ -189,7 +192,7 @@ The MVP proves the end-to-end flow: **scan tag → music plays on HomePod, contr
 1. **Setup Screen** — WiFi SSID/password, HA URL, access token input
 2. **Home Screen** — "Ready to scan" state, current room displayed, tap to change room
 3. **Room Picker** — List of available HA media players, tap to select
-4. **Now Playing** *(stretch)* — Track info, play/pause, volume
+4. **Now Playing** *(stretch)* — Track title/artist, play/pause, volume
 
 ---
 
@@ -205,24 +208,35 @@ Authorization: Bearer <LONG_LIVED_ACCESS_TOKEN>
 
 ### Key API Calls (REST)
 
-**1. Fire a tag scanned event:**
+**1. Report a tag scan (HA's native Tag API):**
 ```
-POST /api/events/vyknoll_tag_scanned
+POST /api/tag/scanned
 {
-  "tag_uid": "04:A2:B3:C4:D5:E6:F7",
-  "room": "media_player.kitchen_homepod"
+  "tag_id": "04:A2:B3:C4:D5:E6:F7",
+  "device_id": "vyknoll_device_id"
 }
 ```
 
-HA automation listens for this event and triggers Music Assistant to play the mapped content.
+HA's built-in Tag integration receives this, registers unknown tags automatically, and fires a `tag_scanned` event that automations can trigger on.
 
-**2. Get available media players:**
+**2. Set the active room (input_select helper):**
+
+Store the currently selected room in an HA `input_select` helper so automations can reference it:
+```
+POST /api/services/input_select/select_option
+{
+  "entity_id": "input_select.vyknoll_room",
+  "option": "Kitchen HomePod"
+}
+```
+
+**3. Get available media players:**
 ```
 GET /api/states
 ```
 Filter for entities matching `media_player.*` to build the room picker.
 
-**3. Playback control:**
+**4. Playback control:**
 ```
 POST /api/services/media_player/media_play_pause
 { "entity_id": "media_player.kitchen_homepod" }
@@ -231,40 +245,50 @@ POST /api/services/media_player/volume_set
 { "entity_id": "media_player.kitchen_homepod", "volume_level": 0.5 }
 ```
 
-**4. Get current playback state:**
+**5. Get current playback state:**
 ```
 GET /api/states/media_player.kitchen_homepod
 ```
-Returns `media_title`, `media_artist`, `media_content_id`, `volume_level`, `state` (playing/paused/idle), etc.
+Returns `media_title`, `media_artist`, `volume_level`, `state` (playing/paused/idle), etc.
+
+### HA Setup
+
+**Required HA helpers:**
+- `input_select.vyknoll_room` — tracks which room/speaker is currently selected on the Vyknoll device
+
+**Tag registration workflow:**
+1. Stick an NFC sticker on a new mini vinyl disc
+2. Scan it on the Vyknoll device
+3. HA detects a new tag and prompts you to name it (e.g., "Abbey Road")
+4. Create an automation in HA's UI: when this tag is scanned → call Music Assistant to play the album on the room from `input_select.vyknoll_room`
 
 ### HA Automation Example (Tag → Music)
 
 ```yaml
 automation:
-  - alias: "Vyknoll: Play album from NFC tag"
+  - alias: "Vyknoll: Abbey Road"
     trigger:
-      - platform: event
-        event_type: vyknoll_tag_scanned
+      - platform: tag
+        tag_id: "04:A2:B3:C4:D5:E6:F7"
     action:
-      - choose:
-          - conditions:
-              - "{{ trigger.event.data.tag_uid == '04:A2:B3:C4:D5:E6:F7' }}"
-            sequence:
-              - service: mass.play_media  # Music Assistant
-                target:
-                  entity_id: "{{ trigger.event.data.room }}"
-                data:
-                  media_id: "Abbey Road"
-                  media_type: "album"
-          - conditions:
-              - "{{ trigger.event.data.tag_uid == '04:B2:C3:D4:E5:F6:A7' }}"
-            sequence:
-              - service: mass.play_media
-                target:
-                  entity_id: "{{ trigger.event.data.room }}"
-                data:
-                  media_id: "Chill Vibes"
-                  media_type: "playlist"
+      - service: mass.play_media  # Music Assistant
+        target:
+          entity_id: "{{ states('input_select.vyknoll_room') }}"
+        data:
+          media_id: "Abbey Road"
+          media_type: "album"
+
+  - alias: "Vyknoll: Chill Vibes Playlist"
+    trigger:
+      - platform: tag
+        tag_id: "04:B2:C3:D4:E5:F6:A7"
+    action:
+      - service: mass.play_media
+        target:
+          entity_id: "{{ states('input_select.vyknoll_room') }}"
+        data:
+          media_id: "Chill Vibes"
+          media_type: "playlist"
 ```
 
 ---
@@ -287,7 +311,7 @@ automation:
 - [ ] Read NFC tag UID and print to serial
 
 ### Phase 2: MVP (Week 2-4)
-- [ ] Wire NFC scan → HA event firing
+- [ ] Wire NFC scan → HA tag scanned API call
 - [ ] Implement room picker (fetch media players from HA, display as list)
 - [ ] Create the HA automation for tag → music (at least 2-3 test tags)
 - [ ] Add scan feedback (screen flash, sound if buzzer available)
@@ -295,7 +319,7 @@ automation:
 - [ ] WiFi setup screen (on-device keyboard for SSID/password)
 
 ### Phase 3: Polish (Week 4-6)
-- [ ] Now-playing screen (track info, album art if feasible)
+- [ ] Now-playing screen (track title/artist, playback state)
 - [ ] Playback controls (play/pause, skip, volume slider)
 - [ ] Multiple room selection (play in multiple rooms simultaneously)
 - [ ] OTA firmware updates
@@ -306,30 +330,27 @@ automation:
 - [ ] Design and produce mini 7" vinyl discs (laser cut, 3D print, or cardboard)
 - [ ] NFC sticker placement on discs
 - [ ] Enclosure for ESP32 + NFC reader
-- [ ] Tag management UI or workflow (how to add new albums to new tags)
+- [ ] Tag management workflow documentation (scan new tag → HA auto-registers → create automation in HA UI)
 
 ---
 
-## 8. Open Questions
+## 8. Resolved Decisions
+
+| Question | Decision |
+|----------|----------|
+| Music backend | **Music Assistant add-on** — supports many players and sources |
+| Tag management | **HA's built-in Tag integration** — scan a new tag, HA auto-registers it, create automations in HA's UI |
+| Album art on display | **No** — album art lives on the physical vinyl disc. Display shows track title/artist only |
+| Web simulator | **Removed** — hardware-first development, no Emscripten target |
+| Project name | **Vyknoll** — keeping the name |
+
+## 9. Open Questions
 
 1. **Exact board model** — Need to confirm the 4" ESP32 display module specs (display driver, touch controller, pin mapping). This is a prerequisite for Phase 0.
 
-2. **Music Assistant vs. native HA media** — Are you using the Music Assistant add-on, or just native HA media player integrations? This affects the service calls.
-
-3. **Tag management** — How do you want to add new tags? Options:
-   - Manually create HA automations per tag (simple, full control)
-   - Build a tag registration UI on the device or in a companion web app
-   - Use HA's built-in tag integration (HA can natively handle NFC tag events)
-
-4. **Album art** — Do you want album art on the 4" display? It's achievable but adds complexity (downloading images, decoding JPEG, display memory). Worth considering for Phase 3.
-
-5. **Web simulator** — The original project had an Emscripten web simulator. Is this still valuable for development, or is hardware-first fine?
-
-6. **Project name** — Is "Vyknoll" still the right name, or does the pivot warrant a rename?
-
 ---
 
-## 9. File Structure (Proposed)
+## 10. File Structure (Proposed)
 
 ```
 vyknoll/
@@ -342,7 +363,7 @@ vyknoll/
 │   │   │   ├── ui.cpp/.h         # LVGL UI manager
 │   │   │   ├── screen_home.cpp   # Home/ready screen
 │   │   │   ├── screen_rooms.cpp  # Room picker screen
-│   │   │   ├── screen_playing.cpp# Now playing screen
+│   │   │   ├── screen_playing.cpp # Now playing (track title, controls)
 │   │   │   └── screen_setup.cpp  # WiFi/HA setup screen
 │   │   └── config.cpp/.h         # Persistent config (NVS)
 │   ├── test/
@@ -358,14 +379,14 @@ vyknoll/
 
 ---
 
-## 10. Summary
+## 11. Summary
 
 | Aspect | Decision |
 |--------|----------|
 | **Concept** | NFC-tagged mini vinyl records → music on HomePods |
-| **Backend** | Home Assistant + Music Assistant |
+| **Backend** | Home Assistant + Music Assistant add-on |
 | **Communication** | REST API (MVP), WebSocket (later) |
-| **Tag strategy** | UID-only tags, mapping lives in HA automations |
+| **Tag strategy** | UID-only tags, HA built-in Tag integration, automations in HA UI |
 | **Hardware** | 4" ESP32-S3 touch display + PN532 NFC reader |
 | **Framework** | Arduino/PlatformIO + LVGL |
 | **Speaker model** | Room-based selection via touchscreen |
