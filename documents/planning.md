@@ -80,16 +80,24 @@ The device maintains a "current room" selection. When a tag is scanned, music pl
 
 ### ESP32 Display Module
 
-**Target:** 4" ESP32-S3 touch display module (exact model TBD — needs to be confirmed).
+**Board:** [Makerfabs MaTouch ESP32-S3 Parallel TFT with Touch 4.0"](https://www.makerfabs.com/esp32-s3-parallel-tft-with-touch-4-inch.html)
 
-Key requirements for the display module:
-- 4" LCD with capacitive touch
-- ESP32-S3 (for sufficient RAM/flash for LVGL UI)
-- SPI or parallel display interface
-- Available GPIO pins for NFC reader connection
-- USB-C power (always powered)
+| Spec | Detail |
+|------|--------|
+| **Display** | 4" IPS, 480×480, RGB565 parallel interface, >80 FPS |
+| **Display driver** | ST7701 (3-wire SPI init + RGB parallel data) |
+| **Touch** | 5-point capacitive touch |
+| **MCU** | ESP32-S3 (dual-core LX7, up to 240 MHz) |
+| **Memory** | OPI PSRAM, 16MB flash |
+| **Storage** | MicroSD card slot (onboard 16GB SD) |
+| **Connectivity** | WiFi + Bluetooth 5.0 |
+| **Connectors** | 2× Mabee/Grove (I2C + GPIO), speaker out, LiPo battery socket |
+| **Power** | USB-C 5V |
+| **Extras** | Built-in speaker output (3Ω 4W), LiPo charger |
 
-**Action item:** Confirm exact board model, display controller IC, and touch controller IC. This determines driver configuration.
+**NFC connection:** PN532 connects via one of the onboard Mabee/Grove I2C connectors — no soldering or custom wiring needed.
+
+**Display driver note:** ST7701 uses a 3-wire SPI bus for initialization commands, then switches to RGB parallel for pixel data. LovyanGFX has ST7701 support. The [Makerfabs GitHub repo](https://github.com/Makerfabs/ESP32-S3-Parallel-TFT-with-Touch-4inch) has example pin configs and driver setup code.
 
 ### NFC Reader
 
@@ -97,7 +105,7 @@ Options (in order of recommendation):
 1. **PN532** — Most common, well-supported, SPI/I2C/UART. Reads most NFC tag types.
 2. **RC522** — Cheaper, SPI only, MIFARE-focused. Less flexible but adequate for UID reading.
 
-**Recommendation:** PN532 via I2C (fewer pins used, leaves SPI for display).
+**Recommendation:** PN532 via I2C, connected to a Mabee/Grove port on the MaTouch board. Plug-and-play.
 
 ### NFC Tags
 
@@ -127,7 +135,7 @@ ESPHome is excellent for simple HA devices, but this project has a rich, interac
 | Library | Purpose |
 |---------|---------|
 | LVGL | Touch UI framework |
-| TFT_eSPI or LovyanGFX | Display driver (depends on board) |
+| LovyanGFX | Display driver (ST7701 support, RGB parallel) |
 | ArduinoJson | JSON parsing for HA REST API |
 | PN532 (Adafruit or similar) | NFC tag reading |
 | WiFiManager or custom | WiFi provisioning |
@@ -346,7 +354,7 @@ automation:
 
 ## 9. Open Questions
 
-1. **Exact board model** — Need to confirm the 4" ESP32 display module specs (display driver, touch controller, pin mapping). This is a prerequisite for Phase 0.
+All major questions resolved. Hardware confirmed as Makerfabs MaTouch ESP32-S3 4.0".
 
 ---
 
@@ -387,7 +395,7 @@ vyknoll/
 | **Backend** | Home Assistant + Music Assistant add-on |
 | **Communication** | REST API (MVP), WebSocket (later) |
 | **Tag strategy** | UID-only tags, HA built-in Tag integration, automations in HA UI |
-| **Hardware** | 4" ESP32-S3 touch display + PN532 NFC reader |
+| **Hardware** | Makerfabs MaTouch ESP32-S3 4" (480×480, ST7701) + PN532 NFC via I2C |
 | **Framework** | Arduino/PlatformIO + LVGL |
 | **Speaker model** | Room-based selection via touchscreen |
 | **Power** | Always plugged in (USB/wall) |
